@@ -39,3 +39,13 @@ date,location,item_code,qty_base,count_point,counted_by
 1405/07/30,ER,GLV-VIN-L,270,closing,شمارنده نمونه
 1405/07/01,CENTRAL,GLV-VIN-L,4600,opening,انباردار نمونه
 1405/07/30,CENTRAL,GLV-VIN-L,2400,closing,انباردار نمونه
+1405/07/01,ICU,GAU-500,8,opening,شمارنده نمونه
+1405/07/30,ICU,GAU-500,3,closing,شمارنده نمونه
+1405/07/01,INT,GAU-500,6,opening,شمارنده نمونه
+1405/07/30,INT,GAU-500,2,closing,شمارنده نمونه
+1405/07/01,SURG,GAU-500,8,opening,شمارنده نمونه
+1405/07/30,SURG,GAU-500,2,closing,شمارنده نمونه
+1405/07/01,ER,GAU-500,5,opening,شمارنده نمونه
+1405/07/30,ER,GAU-500,2,closing,شمارنده نمونه
+1405/07/01,CENTRAL,GAU-500,60,opening,انباردار نمونه
+1405/07/30,CENTRAL,GAU-500,29,closing,انباردار نمونه

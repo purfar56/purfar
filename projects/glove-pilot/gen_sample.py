@@ -7,6 +7,7 @@
   - ثبت ناقص مصرف در اورژانس
   - کسورات بیمه به دلیل نبود مستند مصرف
   - یک انتقال بین بخش (داخلی به اورژانس) و یک ضایعات ثبت‌شده در جراحی
+  - گاز: مصرف جراحی بالاتر از معیار و کسری ۴ بسته در انبار مرکزی
 """
 import csv
 import random
@@ -108,6 +109,26 @@ for item, (grp, share) in items.items():
     central_close = central_open + received - central_issue_total[item] - shrink
     stock += [[d(1), "CENTRAL", item, central_open, "opening", "انباردار نمونه"],
               [d(DAYS), "CENTRAL", item, central_close, "closing", "انباردار نمونه"]]
+
+# ---------- گاز طبی (واحد پایه: بسته نیم‌کیلویی؛ روی پرونده ثبت نمی‌شود) ----------
+gauze_rate = {"ICU": 0.095, "INT": 0.04, "SURG": 0.09, "ER": 0.02}
+g_central_open, g_issued = 60, 0
+for ward, act in wards.items():
+    used = round(gauze_rate[ward] * act)
+    opening = random.randint(3, 8)
+    issued = max(used + random.randint(2, 5) - opening, 0)
+    closing = opening + issued - used
+    stock += [[d(1), ward, "GAU-500", opening, "opening", "شمارنده نمونه"],
+              [d(DAYS), ward, "GAU-500", closing, "closing", "شمارنده نمونه"]]
+    half = issued // 2
+    for n, q in enumerate([half, issued - half], 1):
+        if q:
+            issues.append([d(5 if n == 1 else 20), f"HV-{ward}-GAU-{n}", "GAU-500", ward, q, "بسته"])
+    g_issued += issued
+g_received = -(-(g_issued + 20 - g_central_open) // 20) * 20
+receipts.append([d(4), "INV-GAU-0", "تامین‌کننده نمونه", "GAU-500", g_received // 20, "کارتن", 9900000])
+stock += [[d(1), "CENTRAL", "GAU-500", g_central_open, "opening", "انباردار نمونه"],
+          [d(DAYS), "CENTRAL", "GAU-500", g_central_open + g_received - g_issued - 4, "closing", "انباردار نمونه"]]
 
 write("receipts.csv", ["date", "doc_no", "supplier", "item_code", "qty", "unit", "unit_price_per_base_rial"], receipts)
 write("issues.csv", ["date", "doc_no", "item_code", "ward", "qty", "unit"], issues)

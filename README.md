@@ -8,7 +8,9 @@
 templates/inspection-checklist.md     # چک‌لیست بازرسی
 templates/inspection-report.md        # قالب گزارش بازرسی
 reports/                              # محل ذخیره گزارش‌ها و نامه‌های ساخته‌شده
-projects/glove-pilot/                 # پایلوت ردیابی دستکش: ورود، تحویل، مصرف، هزینه و بیمه
+projects/glove-pilot/                 # پایلوت ردیابی اقلام (دستکش، گاز): ورود، تحویل، مصرف، هزینه و بیمه
+projects/his-analysis/                # تحلیل گزارش اقلام HIS با تخت‌روز (دستکش، گاز، آلبومین)
+projects/albumin-audit/               # چک‌لیست ممیزی پرونده‌های آلبومین
 ```
 
 ## استفاده

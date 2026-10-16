@@ -21,6 +21,10 @@ WARD_MAP = {"بخش 2": "2", "بخش 3A": "3A", "بخش 3B": "3B", "بخش 3C": 
             "بخش نوزادان": "نوزادان", "POST CATH": "post cath"}
 
 
+# اقلام پایلوت غیر از دستکش: کد HIS -> نام کوتاه
+PILOT_ITEMS = {118490: "گاز طبی ساده نیم‌کیلویی"}
+
+
 def glove_type(name):
     n = str(name)
     if "دستكش" not in n and "دستکش" not in n and "glove" not in n.lower():
@@ -119,6 +123,17 @@ def main():
     al_brand = al.groupby(["كد", "نام", "في خريد"]).agg(ویال=("تعداد", "sum"), ارزش_خرید=("جمع خريد", "sum"),
                                                      سهم_بیمه=("سهم_بیمه_کل", "sum")).reset_index()
 
+    # ---------- سایر اقلام پایلوت (مثل گاز) ----------
+    pil = df[df["كد"].isin(PILOT_ITEMS)].copy()
+    pil["قلم"] = pil["كد"].map(PILOT_ITEMS)
+    pw = pil.groupby(["قلم", "بخش"]).agg(تعداد=("تعداد", "sum"), ارزش_خرید=("جمع خريد", "sum"),
+                                       سهم_بیمه_و_بیمار=("سهم_بیمه_کل", "sum")).reset_index()
+    pw["سهم_بیمه_و_بیمار"] += pil.groupby(["قلم", "بخش"])["سهم بيمار"].sum().values
+    pw["تخت_روز"] = pw["بخش"].map(lambda w: bd_tot["تخت_روز"].get(WARD_MAP.get(w)))
+    pw["در_۱۰۰_تخت‌روز"] = (pw["تعداد"] / pw["تخت_روز"] * 100).round(1)
+    pw = pw.sort_values(["قلم", "ارزش_خرید"], ascending=[True, False])
+    pprice = pil.groupby(["قلم", "في خريد"])["تعداد"].sum().reset_index()
+
     # ---------- کیفیت داده ----------
     dq = []
     unmapped = sorted(set(g["بخش"]) - set(WARD_MAP) - {"CSR", "اتاق عمل"})
@@ -134,6 +149,7 @@ def main():
         price.to_excel(xw, sheet_name="دستکش_قیمت", index=False)
         billing.reset_index().to_excel(xw, sheet_name="دستکش_صورتحساب", index=False)
         alw.reset_index().to_excel(xw, sheet_name="آلبومین_بخش", index=False)
+        pw.to_excel(xw, sheet_name="سایر_اقلام_پایلوت", index=False)
         al_brand.to_excel(xw, sheet_name="آلبومین_برند", index=False)
         bd.pivot_table(index="ward", columns="month", values="bed_days", aggfunc="sum").reset_index() \
           .to_excel(xw, sheet_name="تخت_روز", index=False)
@@ -181,6 +197,18 @@ def main():
         tb = "—" if pd.isna(r["تخت_روز"]) else fmt(r["تخت_روز"])
         rt = "—" if pd.isna(r["ویال_در_۱۰۰_تخت‌روز"]) else r["ویال_در_۱۰۰_تخت‌روز"]
         L.append(f"| {w} | {fmt(r['ویال'])} | {tb} | {rt} | {fmt(r['ارزش_خرید'])} | {r['درصد_سهم_بیمه']} |")
+    for item, part in pw.groupby("قلم"):
+        L += ["", f"## {item}", "",
+              f"- کل: {fmt(part['تعداد'].sum())} واحد، ارزش خرید {fmt(part['ارزش_خرید'].sum())} ریال؛ "
+              f"سهم ثبت‌شده روی پرونده: {fmt(part['سهم_بیمه_و_بیمار'].sum())} ریال",
+              "- قیمت خرید هر واحد: " + "، ".join(
+                  f"{fmt(r['في خريد'])} ریال ({fmt(r['تعداد'])})"
+                  for _, r in pprice[pprice["قلم"] == item].iterrows()), "",
+              "| بخش | تعداد | تخت‌روز | در ۱۰۰ تخت‌روز | ارزش خرید (ریال) |", "|---|---|---|---|---|"]
+        for _, r in part.iterrows():
+            tb = "—" if pd.isna(r["تخت_روز"]) else fmt(r["تخت_روز"])
+            rt = "—" if pd.isna(r["در_۱۰۰_تخت‌روز"]) else r["در_۱۰۰_تخت‌روز"]
+            L.append(f"| {r['بخش']} | {fmt(r['تعداد'])} | {tb} | {rt} | {fmt(r['ارزش_خرید'])} |")
     L += ["", "## محدودیت‌های داده", ""] + [f"- {m}: {t}" for m, t in dq]
     (out / "his_report.md").write_text("\n".join(L) + "\n", encoding="utf-8")
     print(f"خروجی: {out / 'his_analysis.xlsx'}\nگزارش: {out / 'his_report.md'}")

@@ -13,6 +13,8 @@ from pathlib import Path
 import pandas as pd
 
 HERE = Path(__file__).parent
+GROUP_FA = {"nitrile": "دستکش نیتریل", "vinyl": "دستکش وینیل", "gauze": "گاز طبی"}
+UNIT_FA = {"gauze": "بسته"}  # بقیه گروه‌ها: عدد
 
 
 def load(path, name, required=True):
@@ -189,7 +191,7 @@ def main():
     grp = grp.merge(wards[["ward", "ward_name", "activity_type"]], on="ward", how="left")
     for w in grp[grp["activity"].isna()]["ward"].unique():
         dq.append(("بحرانی", "تخت‌روز/ویزیت دوره ثبت نشده", w))
-    grp["مصرف_به_ازای_فعالیت"] = (grp["مصرف_واقعی"] / grp["activity"]).round(2)
+    grp["مصرف_به_ازای_فعالیت"] = (grp["مصرف_واقعی"] / grp["activity"]).round(3)
     if not norms.empty:
         grp = grp.merge(norms[["ward", "item_group", "norm_per_activity", "source"]],
                         on=["ward", "item_group"], how="left")
@@ -246,8 +248,9 @@ def main():
         ("ضایعات ثبت‌شده بخش‌ها", wd["ضایعات_ریال"].sum()),
         ("موجودی بخش‌ها بیش از حداکثر پیشنهادی", st["مازاد_بر_حداکثر_ریال"].sum()),
         ("د) کسورات بیمه", ins["deducted_rial"].sum() if not ins.empty else 0),
-        ("نرخ ثبت مصرف روی پرونده (درصد)",
-         round(wd["ثبت_روی_پرونده"].sum() / max(wd["مصرف_واقعی"].sum(), 1) * 100, 1)),
+        ("نرخ ثبت مصرف روی پرونده (درصد)",  # فقط اقلام قابل اخذ
+         round(wd.loc[wd["قابل_اخذ"], "ثبت_روی_پرونده"].sum()
+               / max(wd.loc[wd["قابل_اخذ"], "مصرف_واقعی"].sum(), 1) * 100, 1)),
     ], columns=["شاخص", "مقدار"])
 
     dqdf = pd.DataFrame(dq, columns=["شدت", "مشکل", "جزئیات"]).drop_duplicates()
@@ -311,7 +314,8 @@ def build_report(p, summary, grp, wd, central, ins_ward, reasons, dqdf, prev=Non
             return "—"
         v = float(prev[key])
         return f"{v}٪" if pct else fmt(v)
-    L = [f"# گزارش مدیریتی پایلوت دستکش نیتریل و وینیل — دوره {p}", "",
+    groups = "، ".join(GROUP_FA.get(g, g) for g in grp["item_group"].unique())
+    L = [f"# گزارش مدیریتی پایلوت ردیابی اقلام ({groups}) — دوره {p}", "",
          "> این گزارش به‌صورت خودکار از داده‌ها ساخته شده است. بخش «تصمیم موردنیاز» را ناظر تکمیل می‌کند.", ""]
     crit = dqdf[dqdf["شدت"] == "بحرانی"]
     if len(crit):
@@ -326,7 +330,7 @@ def build_report(p, summary, grp, wd, central, ins_ward, reasons, dqdf, prev=Non
           "## مصرف به ازای فعالیت", "",
           "| بخش | گروه | مصرف به ازای فعالیت | معیار (موقت) | هزینه (ریال) |", "|---|---|---|---|---|"]
     for _, r in grp.iterrows():
-        L.append(f"| {r['ward_name']} | {r['item_group']} | {r['مصرف_به_ازای_فعالیت']} در هر {r['activity_type']} "
+        L.append(f"| {r['ward_name']} | {GROUP_FA.get(r['item_group'], r['item_group'])} | {r['مصرف_به_ازای_فعالیت']} در هر {r['activity_type']} "
                  f"| {r['norm_per_activity']} | {fmt(r['هزینه_مصرف_ریال'])} |")
     L += ["",
           "## انحراف ریالی", "",
@@ -340,12 +344,12 @@ def build_report(p, summary, grp, wd, central, ins_ward, reasons, dqdf, prev=Non
           "## خطرهای مهم (سه مورد بزرگ‌تر)", ""]
     risks = []
     for code, r in central[central["ریال_کسری"] > 0].iterrows():
-        risks.append((r["ریال_کسری"], f"کسری انبار مرکزی در {code}: {fmt(r['کسری(+)/اضافه(-)'])} عدد"))
+        risks.append((r["ریال_کسری"], f"کسری انبار مرکزی در {code}: {fmt(r['کسری(+)/اضافه(-)'])} واحد"))
     for _, r in grp[grp["مازاد_بر_معیار_ریال"] > 0].iterrows():
         risks.append((r["مازاد_بر_معیار_ریال"],
-                      f"مصرف {r['item_group']} در {r['ward_name']}: {r['مصرف_به_ازای_فعالیت']} عدد به ازای هر "
+                      f"مصرف {GROUP_FA.get(r['item_group'], r['item_group'])} در {r['ward_name']}: {r['مصرف_به_ازای_فعالیت']} {UNIT_FA.get(r['item_group'], 'عدد')} به ازای هر "
                       f"{r['activity_type']} در برابر معیار {r['norm_per_activity']}"))
-    by_ward = wd.groupby("ward")[["مصرف_واقعی", "ثبت_روی_پرونده", "درآمد_ازدست‌رفته_ریال"]].sum()
+    by_ward = wd[wd["قابل_اخذ"]].groupby("ward")[["مصرف_واقعی", "ثبت_روی_پرونده", "درآمد_ازدست‌رفته_ریال"]].sum()
     for w, r in by_ward.iterrows():
         rate = r["ثبت_روی_پرونده"] / max(r["مصرف_واقعی"], 1) * 100
         if rate < 70:
