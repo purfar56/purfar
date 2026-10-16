@@ -25,6 +25,47 @@ WARD_MAP = {"بخش 2": "2", "بخش 3A": "3A", "بخش 3B": "3B", "بخش 3C": 
 PILOT_ITEMS = {118490: "گاز طبی ساده نیم‌کیلویی"}
 
 
+# گروه مکان برای قواعد هتلینگ
+LOC_GROUP = {"اتاق عمل": "اتاق عمل", "اورژانس": "اورژانس", "بستري اورژانس": "اورژانس",
+             "ICU": "بستری ویژه", "C.C.U": "بستری ویژه", "I.C.U OH": "بستری ویژه", "NICU": "بستری ویژه",
+             "بخش 2": "بستری عمومی", "بخش 3A": "بستری عمومی", "بخش 3B": "بستری عمومی",
+             "بخش 3C": "بستری عمومی", "بخش 4A": "بستری عمومی", "بخش 4B": "بستری عمومی",
+             "بخش زايمان": "بستری عمومی", "بخش نوزادان": "بستری عمومی", "POST CATH": "بستری عمومی"}
+
+
+def hoteling_check(df, rules):
+    """برای هر قاعده و گروه مکان: مقدار، فروش، سهم بیمه و بیمار، و وضعیت نسبت به قاعده."""
+    rows = []
+    name = df["نام"].astype(str)
+    grp_of = df["بخش"].map(LOC_GROUP).fillna("سایر")
+    for _, r in rules.iterrows():
+        m = name.str.contains(r["include_regex"], case=False, regex=True)
+        if isinstance(r["exclude_regex"], str) and r["exclude_regex"]:
+            m &= ~name.str.contains(r["exclude_regex"], case=False, regex=True)
+        not_b = str(r["not_billable_in"]).split(";")
+        yes_b = str(r["billable_in"]).split(";") if isinstance(r["billable_in"], str) else []
+        sub = df[m].assign(گروه=grp_of[m])
+        if "بستری ویژه بدون NICU" in not_b:
+            not_b.append("بستری ویژه")
+            sub = sub[sub["بخش"] != "NICU"]
+        for g, part in sub.groupby("گروه"):
+            sale = part["جمع كل فروش"].sum()
+            billed = (part["سهم_بیمه_کل"] + part["سهم بيمار"]).sum()
+            if g in not_b:
+                status = "ریسک: دریافت جداگانه قلم مشمول ۶٪/هتلینگ" if billed > 0 else "منطبق"
+            elif g in yes_b:
+                status = "درآمد بالقوه ثبت‌نشده" if billed < 0.9 * sale else "منطبق"
+            else:
+                status = "قاعده‌ای برای این مکان نیست"
+            rows.append({"قاعده": r["rule"], "گروه_مکان": g, "تعداد": part["تعداد"].sum(),
+                         "ارزش_فروش": sale, "سهم_بیمه": part["سهم_بیمه_کل"].sum(),
+                         "سهم_بیمار": part["سهم بيمار"].sum(),
+                         "درصد_دریافت‌شده": round(billed / sale * 100, 1) if sale else 0,
+                         "وضعیت": status, "سقف/توضیح": r["cap_note"] if isinstance(r["cap_note"], str) else "",
+                         "منبع": r["source"] if isinstance(r["source"], str) else ""})
+    return pd.DataFrame(rows)
+
+
 def glove_type(name):
     n = str(name)
     if "دستكش" not in n and "دستکش" not in n and "glove" not in n.lower():
@@ -134,6 +175,10 @@ def main():
     pw = pw.sort_values(["قلم", "ارزش_خرید"], ascending=[True, False])
     pprice = pil.groupby(["قلم", "في خريد"])["تعداد"].sum().reset_index()
 
+    # ---------- انطباق با قواعد هتلینگ ----------
+    rules_path = HERE / "hoteling_rules.csv"
+    hc = hoteling_check(df, pd.read_csv(rules_path)) if rules_path.exists() else pd.DataFrame()
+
     # ---------- کیفیت داده ----------
     dq = []
     unmapped = sorted(set(g["بخش"]) - set(WARD_MAP) - {"CSR", "اتاق عمل"})
@@ -150,6 +195,8 @@ def main():
         billing.reset_index().to_excel(xw, sheet_name="دستکش_صورتحساب", index=False)
         alw.reset_index().to_excel(xw, sheet_name="آلبومین_بخش", index=False)
         pw.to_excel(xw, sheet_name="سایر_اقلام_پایلوت", index=False)
+        if not hc.empty:
+            hc.to_excel(xw, sheet_name="انطباق_هتلینگ", index=False)
         al_brand.to_excel(xw, sheet_name="آلبومین_برند", index=False)
         bd.pivot_table(index="ward", columns="month", values="bed_days", aggfunc="sum").reset_index() \
           .to_excel(xw, sheet_name="تخت_روز", index=False)
@@ -209,6 +256,23 @@ def main():
             tb = "—" if pd.isna(r["تخت_روز"]) else fmt(r["تخت_روز"])
             rt = "—" if pd.isna(r["در_۱۰۰_تخت‌روز"]) else r["در_۱۰۰_تخت‌روز"]
             L.append(f"| {r['بخش']} | {fmt(r['تعداد'])} | {tb} | {rt} | {fmt(r['ارزش_خرید'])} |")
+    if not hc.empty:
+        risk = hc[hc["وضعیت"].str.startswith("ریسک")]
+        pot = hc[hc["وضعیت"] == "درآمد بالقوه ثبت‌نشده"]
+        L += ["", "## انطباق با قواعد هتلینگ", "",
+              "مبنا: `hoteling_rules.csv` (از جزوه هتلینگ ۱۴۰۵ دانشگاه علوم پزشکی ایران و بخشنامه‌های ذکرشده در آن). "
+              "کاربرد آن برای قراردادهای این بیمارستان باید با واحد درآمد تأیید شود.", "",
+              f"**اقلام مشمول ۶٪ یا هتلینگ که جداگانه دریافت شده‌اند:** سهم بیمه {fmt(risk['سهم_بیمه'].sum())} ریال، "
+              f"سهم بیمار {fmt(risk['سهم_بیمار'].sum())} ریال", "",
+              "| قاعده | مکان | تعداد | سهم بیمه (ریال) | سهم بیمار (ریال) |", "|---|---|---|---|---|"]
+        for _, r in risk.sort_values("سهم_بیمار", ascending=False).iterrows():
+            L.append(f"| {r['قاعده']} | {r['گروه_مکان']} | {fmt(r['تعداد'])} | {fmt(r['سهم_بیمه'])} | "
+                     f"{fmt(r['سهم_بیمار'])} |")
+        L += ["", "**اقلام قابل دریافت که کمتر از ۹۰٪ ارزش فروششان ثبت شده:**", "",
+              "| قاعده | مکان | تعداد | ارزش فروش (ریال) | درصد دریافت‌شده | سقف |", "|---|---|---|---|---|---|"]
+        for _, r in pot.sort_values("ارزش_فروش", ascending=False).iterrows():
+            L.append(f"| {r['قاعده']} | {r['گروه_مکان']} | {fmt(r['تعداد'])} | {fmt(r['ارزش_فروش'])} | "
+                     f"{r['درصد_دریافت‌شده']}٪ | {r['سقف/توضیح']} |")
     L += ["", "## محدودیت‌های داده", ""] + [f"- {m}: {t}" for m, t in dq]
     (out / "his_report.md").write_text("\n".join(L) + "\n", encoding="utf-8")
     print(f"خروجی: {out / 'his_analysis.xlsx'}\nگزارش: {out / 'his_report.md'}")
