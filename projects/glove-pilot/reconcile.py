@@ -382,9 +382,9 @@ def build_report(p, summary, grp, wd, central, ins_ward, reasons, dqdf, prev=Non
           f"| کسورات بیمه (ریال) | {fmt(s['د) کسورات بیمه'])} | {cmp('د) کسورات بیمه')} |", "",
           "## مصرف به ازای فعالیت", "",
           "| بخش | گروه | مصرف به ازای فعالیت | معیار (موقت) | هزینه (ریال) |", "|---|---|---|---|---|"]
-    for _, r in grp.iterrows():
+    for _, r in grp[(grp["مصرف_واقعی"] != 0) | grp["norm_per_activity"].notna()].iterrows():
         L.append(f"| {r['ward_name']} | {GROUP_FA.get(r['item_group'], r['item_group'])} | {r['مصرف_به_ازای_فعالیت']} در هر {r['activity_type']} "
-                 f"| {r['norm_per_activity']} | {fmt(r['هزینه_مصرف_ریال'])} |")
+                 f"| {'—' if pd.isna(r['norm_per_activity']) else r['norm_per_activity']} | {fmt(r['هزینه_مصرف_ریال'])} |")
     L += ["",
           "## انحراف ریالی", "",
           "| نوع انحراف | ریال |", "|---|---|"]

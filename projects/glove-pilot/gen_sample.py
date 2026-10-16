@@ -8,6 +8,7 @@
   - کسورات بیمه به دلیل نبود مستند مصرف
   - یک انتقال بین بخش (داخلی به اورژانس) و یک ضایعات ثبت‌شده در جراحی
   - گاز: مصرف جراحی بالاتر از معیار و کسری ۴ بسته در انبار مرکزی
+  - اتاق عمل: دستکش معاینه قابل دریافت (تا ۵ جفت برای هر عمل) که روی پرونده ثبت نشده است
 """
 import csv
 import random
@@ -19,8 +20,8 @@ OUT.mkdir(exist_ok=True)
 PERIOD = "1405/07"
 DAYS = 30
 
-wards = {"ICU": 290, "INT": 810, "SURG": 640, "ER": 1350}  # فعالیت ماه
-hoteling = {"ICU": 4_350_000_000, "INT": 6_480_000_000, "SURG": 5_120_000_000, "ER": 2_700_000_000}
+wards = {"ICU": 290, "INT": 810, "SURG": 640, "ER": 1350, "OR": 525}  # فعالیت ماه (اتاق عمل: تعداد عمل)
+hoteling = {"ICU": 4_350_000_000, "INT": 6_480_000_000, "SURG": 5_120_000_000, "ER": 2_700_000_000, "OR": ""}
 # انتقال بین بخش و ضایعات ثبت‌شده: (بخش، قلم) -> تغییر موجودی پایان
 transfers = [["1405/07/12", "TR-1", "GLV-VIN-M", "INT", "ER", 2, "بسته"]]
 waste = [["1405/07/18", "ZA-1", "SURG", "GLV-NIT-M", 100, "عدد", "پارگی بسته در اثر نشت مایع"]]
@@ -31,6 +32,8 @@ true_rate = {
     ("SURG", "nitrile"): (12, 0.78), ("ER", "nitrile"): (6.5, 0.45),
     ("ICU", "vinyl"): (8, 0.80), ("INT", "vinyl"): (6, 0.75),
     ("SURG", "vinyl"): (11, 0.30), ("ER", "vinyl"): (4, 0.40),
+    # اتاق عمل: مثل داده واقعی ۱۴۰۵، دستکش معاینه اصلاً روی پرونده ثبت نمی‌شود
+    ("OR", "nitrile"): (16.5, 0.0), ("OR", "vinyl"): (2.2, 0.0),
 }
 items = {"GLV-NIT-M": ("nitrile", 0.6), "GLV-NIT-L": ("nitrile", 0.4),
          "GLV-VIN-M": ("vinyl", 0.55), "GLV-VIN-L": ("vinyl", 0.45)}
@@ -111,9 +114,11 @@ for item, (grp, share) in items.items():
               [d(DAYS), "CENTRAL", item, central_close, "closing", "انباردار نمونه"]]
 
 # ---------- گاز طبی (واحد پایه: بسته نیم‌کیلویی؛ روی پرونده ثبت نمی‌شود) ----------
-gauze_rate = {"ICU": 0.095, "INT": 0.04, "SURG": 0.09, "ER": 0.02}
+gauze_rate = {"ICU": 0.095, "INT": 0.04, "SURG": 0.09, "ER": 0.02}  # اتاق عمل گاز را از پک‌ها می‌گیرد
 g_central_open, g_issued = 60, 0
 for ward, act in wards.items():
+    if ward not in gauze_rate:
+        continue
     used = round(gauze_rate[ward] * act)
     opening = random.randint(3, 8)
     issued = max(used + random.randint(2, 5) - opening, 0)
