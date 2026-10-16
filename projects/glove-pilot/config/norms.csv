@@ -1,0 +1,9 @@
+ward,item_group,norm_per_activity,activity_type,source
+ICU,nitrile,40,تخت‌روز,موقت - برای اعتبارسنجی در پایلوت
+INT,nitrile,14,تخت‌روز,موقت
+SURG,nitrile,12,تخت‌روز,موقت
+ER,nitrile,6,ویزیت,موقت
+ICU,vinyl,8,تخت‌روز,موقت
+INT,vinyl,6,تخت‌روز,موقت
+SURG,vinyl,5,تخت‌روز,موقت
+ER,vinyl,4,ویزیت,موقت

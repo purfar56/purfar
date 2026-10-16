@@ -1,0 +1,5 @@
+item_code,insurer,billable,tariff_price_per_base_rial,note
+GLV-NIT-M,*,yes,28000,نمونه - قیمت و قابلیت اخذ باید توسط واحد درآمد/اسناد پزشکی تأیید شود
+GLV-NIT-L,*,yes,28000,نمونه
+GLV-VIN-M,*,yes,17000,نمونه
+GLV-VIN-L,*,yes,17000,نمونه
