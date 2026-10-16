@@ -4,7 +4,7 @@ date,location,item_code,qty_base,count_point,counted_by
 1405/07/01,INT,GLV-NIT-M,500,opening,شمارنده نمونه
 1405/07/30,INT,GLV-NIT-M,610,closing,شمارنده نمونه
 1405/07/01,SURG,GLV-NIT-M,1400,opening,شمارنده نمونه
-1405/07/30,SURG,GLV-NIT-M,492,closing,شمارنده نمونه
+1405/07/30,SURG,GLV-NIT-M,392,closing,شمارنده نمونه
 1405/07/01,ER,GLV-NIT-M,500,opening,شمارنده نمونه
 1405/07/30,ER,GLV-NIT-M,435,closing,شمارنده نمونه
 1405/07/01,CENTRAL,GLV-NIT-M,4300,opening,انباردار نمونه
@@ -22,11 +22,11 @@ date,location,item_code,qty_base,count_point,counted_by
 1405/07/01,ICU,GLV-VIN-M,600,opening,شمارنده نمونه
 1405/07/30,ICU,GLV-VIN-M,224,closing,شمارنده نمونه
 1405/07/01,INT,GLV-VIN-M,1400,opening,شمارنده نمونه
-1405/07/30,INT,GLV-VIN-M,227,closing,شمارنده نمونه
+1405/07/30,INT,GLV-VIN-M,27,closing,شمارنده نمونه
 1405/07/01,SURG,GLV-VIN-M,800,opening,شمارنده نمونه
 1405/07/30,SURG,GLV-VIN-M,228,closing,شمارنده نمونه
 1405/07/01,ER,GLV-VIN-M,1400,opening,شمارنده نمونه
-1405/07/30,ER,GLV-VIN-M,330,closing,شمارنده نمونه
+1405/07/30,ER,GLV-VIN-M,530,closing,شمارنده نمونه
 1405/07/01,CENTRAL,GLV-VIN-M,5300,opening,انباردار نمونه
 1405/07/30,CENTRAL,GLV-VIN-M,2700,closing,انباردار نمونه
 1405/07/01,ICU,GLV-VIN-L,1100,opening,شمارنده نمونه

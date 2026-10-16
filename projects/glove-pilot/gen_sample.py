@@ -6,6 +6,7 @@
   - مصرف بالای وینیل در جراحی با ثبت پایین روی پرونده
   - ثبت ناقص مصرف در اورژانس
   - کسورات بیمه به دلیل نبود مستند مصرف
+  - یک انتقال بین بخش (داخلی به اورژانس) و یک ضایعات ثبت‌شده در جراحی
 """
 import csv
 import random
@@ -18,6 +19,11 @@ PERIOD = "1405/07"
 DAYS = 30
 
 wards = {"ICU": 290, "INT": 810, "SURG": 640, "ER": 1350}  # فعالیت ماه
+hoteling = {"ICU": 4_350_000_000, "INT": 6_480_000_000, "SURG": 5_120_000_000, "ER": 2_700_000_000}
+# انتقال بین بخش و ضایعات ثبت‌شده: (بخش، قلم) -> تغییر موجودی پایان
+transfers = [["1405/07/12", "TR-1", "GLV-VIN-M", "INT", "ER", 2, "بسته"]]
+waste = [["1405/07/18", "ZA-1", "SURG", "GLV-NIT-M", 100, "عدد", "پارگی بسته در اثر نشت مایع"]]
+adj = {("INT", "GLV-VIN-M"): -200, ("ER", "GLV-VIN-M"): 200, ("SURG", "GLV-NIT-M"): -100}
 # مصرف واقعی به ازای فعالیت (عدد) و نسبت ثبت روی پرونده
 true_rate = {
     ("ICU", "nitrile"): (42, 0.85), ("INT", "nitrile"): (15, 0.80),
@@ -55,7 +61,7 @@ for item, (grp, share) in items.items():
         issued_boxes = -(-(used + random.randint(2, 6) * 100 - opening) // 100)
         issued_boxes = max(issued_boxes, 0)
         returned = 100 if ward == "INT" and grp == "vinyl" else 0
-        closing = opening + issued_boxes * 100 - returned - used
+        closing = opening + issued_boxes * 100 - returned - used + adj.get((ward, item), 0)
         stock += [[d(1), ward, item, opening, "opening", "شمارنده نمونه"],
                   [d(DAYS), ward, item, closing, "closing", "شمارنده نمونه"]]
         # تقسیم حواله‌ها در طول ماه
@@ -109,5 +115,8 @@ write("returns.csv", ["date", "doc_no", "item_code", "ward", "qty", "unit"], ret
 write("stocktake.csv", ["date", "location", "item_code", "qty_base", "count_point", "counted_by"], stock)
 write("charges.csv", ["date", "line_id", "admission_id", "ward", "item_code", "qty", "unit", "tariff_price_per_base_rial", "insurer"], charges)
 write("claims.csv", ["line_id", "admission_id", "insurer", "billed_rial", "deducted_rial", "deduction_reason"], claims)
-write("activity.csv", ["period", "ward", "activity"], [[PERIOD, w, a] for w, a in wards.items()])
+write("transfers.csv", ["date", "doc_no", "item_code", "from_ward", "to_ward", "qty", "unit"], transfers)
+write("waste.csv", ["date", "doc_no", "location", "item_code", "qty", "unit", "reason"], waste)
+write("activity.csv", ["period", "ward", "activity", "hoteling_revenue_rial"],
+      [[PERIOD, w, a, hoteling[w]] for w, a in wards.items()])
 print("sample data written to", OUT)
