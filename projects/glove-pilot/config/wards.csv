@@ -1,5 +1,5 @@
-ward,ward_name,activity_type,review_days,lead_days,safety_days
-ICU,مراقبت‌های ویژه,تخت‌روز,15,1,3
-INT,داخلی,تخت‌روز,15,1,3
-SURG,جراحی,تخت‌روز,15,1,3
-ER,اورژانس,ویزیت,15,1,3
+ward,ward_name,activity_type,location_group,review_days,lead_days,safety_days
+ICU,مراقبت‌های ویژه,تخت‌روز,بستری ویژه,15,1,3
+INT,داخلی,تخت‌روز,بستری عمومی,15,1,3
+SURG,جراحی,تخت‌روز,بستری عمومی,15,1,3
+ER,اورژانس,ویزیت,اورژانس,15,1,3

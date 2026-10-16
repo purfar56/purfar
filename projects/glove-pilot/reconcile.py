@@ -10,6 +10,7 @@
 import argparse
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 HERE = Path(__file__).parent
@@ -119,8 +120,13 @@ def main():
         cost_price = g["value"] / g["qty_base"]
     else:
         cost_price = pd.Series(dtype=float)
-    tariff = billing[billing["insurer"] == "*"].set_index("item_code")["tariff_price_per_base_rial"]
-    billable = billing[billing["insurer"] == "*"].set_index("item_code")["billable"].eq("yes")
+    # قواعد صورتحساب بر اساس قلم × گروه مکان؛ «*» یعنی هر مکانی که ردیف اختصاصی ندارد
+    if "location_group" not in billing:
+        billing["location_group"] = "*"
+    billing["location_group"] = billing["location_group"].fillna("*")
+    if "cap_per_activity" not in billing:
+        billing["cap_per_activity"] = np.nan
+    tariff = billing.groupby("item_code")["tariff_price_per_base_rial"].max()
     for code in items["item_code"]:
         if code not in cost_price.index:
             dq.append(("عمده", "قیمت خرید در دوره نیست؛ از تعرفه استفاده شد", code))
@@ -179,11 +185,7 @@ def main():
     wd["قیمت_خرید"] = wd["item_code"].map(cost_price)
     wd["هزینه_مصرف_ریال"] = wd["مصرف_واقعی"] * wd["قیمت_خرید"]
     wd["ضایعات_ریال"] = wd["ضایعات_ثبت‌شده"] * wd["قیمت_خرید"]
-    wd["قابل_اخذ"] = wd["item_code"].map(billable).fillna(False)
-    wd["نرخ_ثبت_درصد"] = (wd["ثبت_روی_پرونده"] / wd["مصرف_واقعی"].where(wd["مصرف_واقعی"] > 0) * 100).round(1)
-    gap = (wd["مصرف_واقعی"] - wd["ثبت_روی_پرونده"]).clip(lower=0)
-    wd["ثبت‌نشده_تعداد"] = gap.where(wd["قابل_اخذ"], 0)
-    wd["درآمد_ازدست‌رفته_ریال"] = wd["ثبت‌نشده_تعداد"] * wd["item_code"].map(tariff).fillna(0)
+    wd = apply_billing_rules(wd, billing, wards, activity, dq)
 
     # ---------- مقایسه با معیار مصرف (در سطح گروه کالا) ----------
     grp = wd.groupby(["ward", "item_group"], as_index=False)[["مصرف_واقعی", "هزینه_مصرف_ریال"]].sum()
@@ -245,12 +247,13 @@ def main():
         ("الف) کسری انبار مرکزی", central["ریال_کسری"].clip(lower=0).sum()),
         ("ب) مصرف مازاد بر معیار (به قیمت خرید)", grp["مازاد_بر_معیار_ریال"].sum()),
         ("ج) مصرف ثبت‌نشده روی پرونده (به تعرفه)", wd["درآمد_ازدست‌رفته_ریال"].sum()),
+        ("ه) ثبت روی پرونده در مکان غیرمجاز یا بیش از سقف", wd["ثبت_غیرمجاز_ریال"].sum()),
         ("ضایعات ثبت‌شده بخش‌ها", wd["ضایعات_ریال"].sum()),
         ("موجودی بخش‌ها بیش از حداکثر پیشنهادی", st["مازاد_بر_حداکثر_ریال"].sum()),
         ("د) کسورات بیمه", ins["deducted_rial"].sum() if not ins.empty else 0),
         ("نرخ ثبت مصرف روی پرونده (درصد)",  # فقط اقلام قابل اخذ
          round(wd.loc[wd["قابل_اخذ"], "ثبت_روی_پرونده"].sum()
-               / max(wd.loc[wd["قابل_اخذ"], "مصرف_واقعی"].sum(), 1) * 100, 1)),
+               / max(wd.loc[wd["قابل_اخذ"], "قابل_ثبت_مورد_انتظار"].sum(), 1) * 100, 1)),
     ], columns=["شاخص", "مقدار"])
 
     dqdf = pd.DataFrame(dq, columns=["شدت", "مشکل", "جزئیات"]).drop_duplicates()
@@ -301,6 +304,56 @@ def update_history(path, p, summary):
     return prev
 
 
+def apply_billing_rules(wd, billing, wards, activity, dq):
+    """قابل دریافت بودن، سقف، ثبت‌نشده و ثبت غیرمجاز را بر اساس مکان مصرف حساب می‌کند.
+
+    سقف (cap_per_activity × فعالیت بخش) روی کل «گروه سقف» (cap_group) در بخش اعمال می‌شود؛ مثلاً
+    ۵ جفت دستکش معاینه برای هر بیمار، صرف‌نظر از نیتریل یا وینیل و سایز.
+    """
+    loc = wards.set_index("ward")["location_group"] if "location_group" in wards else pd.Series(dtype=str)
+    wd["گروه_مکان"] = wd["ward"].map(loc).fillna("*")
+    rules = {}
+    for (code, grp_loc), r in billing.groupby(["item_code", "location_group"]):
+        rules[(code, grp_loc)] = r.iloc[0]
+    picked = []
+    for code, g in zip(wd["item_code"], wd["گروه_مکان"]):
+        r = rules.get((code, g), rules.get((code, "*")))
+        if r is None:
+            dq.append(("عمده", "قاعده صورتحساب برای این قلم و مکان تعریف نشده", f"{code} / {g}"))
+        elif r["billable"] not in ("yes", "no"):
+            dq.append(("جزئی", "قابل دریافت بودن هنوز تعیین نشده (unknown)", f"{code} / {g}"))
+        picked.append(r)
+    wd["قابل_اخذ"] = [r is not None and r["billable"] == "yes" for r in picked]
+    wd["تعرفه"] = [float(r["tariff_price_per_base_rial"]) if r is not None else 0.0 for r in picked]
+    wd["سقف_به_ازای_فعالیت"] = [pd.to_numeric(r["cap_per_activity"], errors="coerce") if r is not None
+                                 else np.nan for r in picked]
+    wd["فعالیت"] = wd["ward"].map(activity.set_index("ward")["activity"])
+    # گروه سقف: اقلامی که یک سقف مشترک دارند (مثلاً همه دستکش‌های معاینه)؛ پیش‌فرض گروه کالا
+    cg = [r.get("cap_group") if r is not None else None for r in picked]
+    wd["گروه_سقف"] = [c if isinstance(c, str) and c else g for c, g in zip(cg, wd["item_group"])]
+
+    keys = [wd["ward"], wd["گروه_سقف"]]
+    cons = wd["مصرف_واقعی"].clip(lower=0)
+    cons_g = cons.groupby(keys).transform("sum")
+    chg_g = wd["ثبت_روی_پرونده"].groupby(keys).transform("sum")
+    cap_g = wd["سقف_به_ازای_فعالیت"] * wd["فعالیت"]
+    has_cap = cap_g.notna()
+    exp_g = np.where(has_cap, np.minimum(cons_g, cap_g.fillna(0)), cons_g)
+    share = (cons / cons_g.where(cons_g > 0)).fillna(0)
+    chg_share = (wd["ثبت_روی_پرونده"] / chg_g.where(chg_g > 0)).fillna(0)
+
+    b = wd["قابل_اخذ"]
+    wd["قابل_ثبت_مورد_انتظار"] = np.where(b, exp_g * share, 0).round()
+    wd["نرخ_ثبت_درصد"] = (wd["ثبت_روی_پرونده"] / wd["قابل_ثبت_مورد_انتظار"].where(
+        wd["قابل_ثبت_مورد_انتظار"] > 0) * 100).round(1)
+    wd["ثبت‌نشده_تعداد"] = np.where(b, (wd["قابل_ثبت_مورد_انتظار"] - wd["ثبت_روی_پرونده"]).clip(lower=0), 0)
+    wd["درآمد_ازدست‌رفته_ریال"] = wd["ثبت‌نشده_تعداد"] * wd["تعرفه"]
+    over_cap = np.where(has_cap, (chg_g - cap_g.fillna(0)).clip(lower=0) * chg_share, 0)
+    wd["ثبت_غیرمجاز_تعداد"] = np.where(b, over_cap, wd["ثبت_روی_پرونده"]).round()
+    wd["ثبت_غیرمجاز_ریال"] = wd["ثبت_غیرمجاز_تعداد"] * wd["تعرفه"]
+    return wd
+
+
 def fmt(x):
     return f"{x:,.0f}"
 
@@ -337,6 +390,7 @@ def build_report(p, summary, grp, wd, central, ins_ward, reasons, dqdf, prev=Non
           "| نوع انحراف | ریال |", "|---|---|"]
     for k in ["الف) کسری انبار مرکزی", "ب) مصرف مازاد بر معیار (به قیمت خرید)",
               "ج) مصرف ثبت‌نشده روی پرونده (به تعرفه)", "د) کسورات بیمه",
+              "ه) ثبت روی پرونده در مکان غیرمجاز یا بیش از سقف",
               "ضایعات ثبت‌شده بخش‌ها", "موجودی بخش‌ها بیش از حداکثر پیشنهادی"]:
         L.append(f"| {k} | {fmt(s[k])} |")
     L += ["", "ردیف‌های ب و ج هم‌پوشانی دارند (مصرف مازاد معمولاً ثبت هم نمی‌شود) و نباید با هم جمع شوند. "
@@ -349,9 +403,14 @@ def build_report(p, summary, grp, wd, central, ins_ward, reasons, dqdf, prev=Non
         risks.append((r["مازاد_بر_معیار_ریال"],
                       f"مصرف {GROUP_FA.get(r['item_group'], r['item_group'])} در {r['ward_name']}: {r['مصرف_به_ازای_فعالیت']} {UNIT_FA.get(r['item_group'], 'عدد')} به ازای هر "
                       f"{r['activity_type']} در برابر معیار {r['norm_per_activity']}"))
-    by_ward = wd[wd["قابل_اخذ"]].groupby("ward")[["مصرف_واقعی", "ثبت_روی_پرونده", "درآمد_ازدست‌رفته_ریال"]].sum()
+    by_ward = wd[wd["قابل_اخذ"]].groupby("ward")[["قابل_ثبت_مورد_انتظار", "ثبت_روی_پرونده",
+                                                  "درآمد_ازدست‌رفته_ریال"]].sum()
+    for w, r in wd.groupby("ward")["ثبت_غیرمجاز_ریال"].sum().items():
+        if r > 0:
+            risks.append((r, f"ثبت روی پرونده در {w} برای اقلامی که در این مکان قابل دریافت نیستند یا بیش از سقف "
+                             "(ریسک کسورات و دریافت غیرمجاز از بیمار)"))
     for w, r in by_ward.iterrows():
-        rate = r["ثبت_روی_پرونده"] / max(r["مصرف_واقعی"], 1) * 100
+        rate = r["ثبت_روی_پرونده"] / max(r["قابل_ثبت_مورد_انتظار"], 1) * 100
         if rate < 70:
             risks.append((r["درآمد_ازدست‌رفته_ریال"], f"نرخ ثبت روی پرونده در {w} فقط {rate:.0f}٪"))
     if not ins_ward.empty:
