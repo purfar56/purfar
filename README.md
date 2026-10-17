@@ -12,6 +12,7 @@ projects/glove-pilot/                 # پایلوت ردیابی اقلام (د
 projects/his-analysis/                # تحلیل گزارش اقلام HIS با تخت‌روز (دستکش، گاز، آلبومین)
 projects/albumin-audit/               # چک‌لیست ممیزی پرونده‌های آلبومین
 projects/or-form/                     # فرم ثبت روزانه دستکش و اقلام قابل دریافت اتاق عمل
+knowledge/                            # دانش پروژه (خلاصه پروژه ChatGPT و متن خام آن)
 ```
 
 ## استفاده
