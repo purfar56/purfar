@@ -5,6 +5,9 @@
 ## ساختار
 ```
 .claude/agents/pharma-supervisor.md   # تعریف ایجنت
+.claude/agents/ceo-drug-letter.md     # نامه‌های دارویی به مدیرعامل با صدای خود ناظر
+knowledge/drug-facts-1405.md          # همه اطلاعات دارویی جمع‌شده برای نامه‌ها
+tools/md2docx.py                      # تبدیل نامه Markdown به Word راست‌به‌چپ
 templates/inspection-checklist.md     # چک‌لیست بازرسی
 templates/inspection-report.md        # قالب گزارش بازرسی
 reports/                              # محل ذخیره گزارش‌ها و نامه‌های ساخته‌شده
@@ -20,6 +23,12 @@ knowledge/                            # دانش پروژه (خلاصه پروژ
 
 ```
 @pharma-supervisor یادداشت‌های بازدید امروز از داروخانه X را به گزارش رسمی تبدیل کن
+```
+
+برای نامه دارویی به مدیرعامل:
+
+```
+@ceo-drug-letter درباره آلبومین برای مدیرعامل نامه بنویس
 ```
 
 نمونه درخواست‌ها:
